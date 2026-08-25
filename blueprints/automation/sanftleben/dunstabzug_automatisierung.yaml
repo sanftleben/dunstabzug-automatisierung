@@ -5,7 +5,7 @@ blueprint:
     Leistungsaufnahme, Luftfeuchtigkeit oder Temperatur einen konfigurierbaren
     Einschaltwert überschreitet und eine Person in der Küche erkannt wird.
     Der Dunstabzug wird wieder ausgeschaltet, wenn alle Werte unter ihren
-    Ausschaltwerten liegen. Separate Ein-/Ausschaltschwellen bilden eine
+    Ausschaltschwellen liegen. Separate Ein-/Ausschaltschwellen bilden eine
     Hysterese und verhindern unnötiges Schalten an der Grenze.
   domain: automation
   source_url: https://github.com/sanftleben/dunstabzug-automatisierung/blob/main/blueprints/automation/sanftleben/dunstabzug_automatisierung.yaml
@@ -120,7 +120,7 @@ blueprint:
 
     exhaust_fan:
       name: Dunstabzug
-      description: Schalter oder andere schaltbare Entität für den Dunstabzug.
+      description: Schalter oder Lüfter für den Dunstabzug.
       selector:
         entity:
           filter:
@@ -138,7 +138,7 @@ blueprint:
 
     end_time:
       name: Späteste Einschaltzeit
-      description: Nach dieser Uhrzeit wird der Dunstabzug nicht automatisch eingeschaltet. Ist er noch aktiv, wird er ausgeschaltet.
+      description: Nach dieser Uhrzeit wird der Dunstabzug nicht mehr automatisch eingeschaltet.
       default: '22:00:00'
       selector:
         time: {}
@@ -177,27 +177,12 @@ triggers:
     at: !input end_time
     id: end_time
 
-variables:
-  power_sensor: !input power_sensor
-  power_on_threshold: !input power_on_threshold
-  power_off_threshold: !input power_off_threshold
-  humidity_sensor: !input humidity_sensor
-  humidity_on_threshold: !input humidity_on_threshold
-  humidity_off_threshold: !input humidity_off_threshold
-  temperature_sensor: !input temperature_sensor
-  temperature_on_threshold: !input temperature_on_threshold
-  temperature_off_threshold: !input temperature_off_threshold
-  occupancy_sensor: !input occupancy_sensor
-  exhaust_fan: !input exhaust_fan
-
 conditions: []
 
 actions:
   - choose:
       - alias: Dunstabzug einschalten
         conditions:
-          - condition: template
-            value_template: "{{ trigger.id != 'end_time' }}"
           - condition: time
             after: !input start_time
             before: !input end_time
@@ -209,9 +194,9 @@ actions:
             state: 'off'
           - condition: template
             value_template: >-
-              {{ states(power_sensor) | float(0) > power_on_threshold
-                 or states(humidity_sensor) | float(0) > humidity_on_threshold
-                 or states(temperature_sensor) | float(0) > temperature_on_threshold }}
+              {{ states(power_sensor) | float(0) > (power_on_threshold | float(0))
+                 or states(humidity_sensor) | float(0) > (humidity_on_threshold | float(0))
+                 or states(temperature_sensor) | float(0) > (temperature_on_threshold | float(0)) }}
         sequence:
           - action: homeassistant.turn_on
             target:
@@ -224,9 +209,9 @@ actions:
             state: 'on'
           - condition: template
             value_template: >-
-              {{ states(power_sensor) | float(0) <= power_off_threshold
-                 and states(humidity_sensor) | float(0) <= humidity_off_threshold
-                 and states(temperature_sensor) | float(0) <= temperature_off_threshold }}
+              {{ states(power_sensor) | float(0) <= (power_off_threshold | float(0))
+                 and states(humidity_sensor) | float(0) <= (humidity_off_threshold | float(0))
+                 and states(temperature_sensor) | float(0) <= (temperature_off_threshold | float(0)) }}
         sequence:
           - delay: !input off_delay
           - condition: state
@@ -234,9 +219,9 @@ actions:
             state: 'on'
           - condition: template
             value_template: >-
-              {{ states(power_sensor) | float(0) <= power_off_threshold
-                 and states(humidity_sensor) | float(0) <= humidity_off_threshold
-                 and states(temperature_sensor) | float(0) <= temperature_off_threshold }}
+              {{ states(power_sensor) | float(0) <= (power_off_threshold | float(0))
+                 and states(humidity_sensor) | float(0) <= (humidity_off_threshold | float(0))
+                 and states(temperature_sensor) | float(0) <= (temperature_off_threshold | float(0)) }}
           - action: homeassistant.turn_off
             target:
               entity_id: !input exhaust_fan
