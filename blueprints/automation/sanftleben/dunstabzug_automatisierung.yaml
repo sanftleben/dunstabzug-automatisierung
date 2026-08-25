@@ -1,0 +1,242 @@
+blueprint:
+  name: Dunstabzug – automatische Koch-Erkennung
+  description: >-
+    Schaltet einen Dunstabzug automatisch ein, wenn mindestens einer von
+    Leistungsaufnahme, Luftfeuchtigkeit oder Temperatur einen konfigurierbaren
+    Einschaltwert überschreitet und eine Person in der Küche erkannt wird.
+    Der Dunstabzug wird wieder ausgeschaltet, wenn alle Werte unter ihren
+    Ausschaltwerten liegen. Separate Ein-/Ausschaltschwellen bilden eine
+    Hysterese und verhindern unnötiges Schalten an der Grenze.
+  domain: automation
+  source_url: https://github.com/sanftleben/dunstabzug-automatisierung/blob/main/blueprints/automation/sanftleben/dunstabzug_automatisierung.yaml
+  input:
+    power_sensor:
+      name: Leistungssensor
+      description: Sensor für die aktuelle Leistungsaufnahme des Kochfelds bzw. Geräts in Watt.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+          multiple: false
+
+    power_on_threshold:
+      name: Leistung – Einschalten
+      description: Ab dieser Leistung wird Kochen erkannt.
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 5000
+          step: 0.1
+          unit_of_measurement: W
+          mode: box
+
+    power_off_threshold:
+      name: Leistung – Ausschalten
+      description: Unterhalb dieses Wertes gilt die Leistung als normalisiert.
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 5000
+          step: 0.1
+          unit_of_measurement: W
+          mode: box
+
+    humidity_sensor:
+      name: Luftfeuchtigkeitssensor
+      description: Sensor für die relative Luftfeuchtigkeit in der Küche.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+          multiple: false
+
+    humidity_on_threshold:
+      name: Luftfeuchtigkeit – Einschalten
+      description: Ab dieser Luftfeuchtigkeit wird Kochen erkannt.
+      default: 46
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: '%'
+          mode: box
+
+    humidity_off_threshold:
+      name: Luftfeuchtigkeit – Ausschalten
+      description: Unterhalb dieses Wertes gilt die Luftfeuchtigkeit als normalisiert.
+      default: 44
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: '%'
+          mode: box
+
+    temperature_sensor:
+      name: Temperatursensor
+      description: Sensor für die Temperatur in der Küche.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+          multiple: false
+
+    temperature_on_threshold:
+      name: Temperatur – Einschalten
+      description: Ab dieser Temperatur wird Kochen erkannt.
+      default: 30
+      selector:
+        number:
+          min: -20
+          max: 100
+          step: 0.1
+          unit_of_measurement: °C
+          mode: box
+
+    temperature_off_threshold:
+      name: Temperatur – Ausschalten
+      description: Unterhalb dieses Wertes gilt die Temperatur als normalisiert.
+      default: 29
+      selector:
+        number:
+          min: -20
+          max: 100
+          step: 0.1
+          unit_of_measurement: °C
+          mode: box
+
+    occupancy_sensor:
+      name: Anwesenheitssensor Küche
+      description: Der Dunstabzug wird nur automatisch eingeschaltet, wenn hier Anwesenheit erkannt wird.
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+          multiple: false
+
+    exhaust_fan:
+      name: Dunstabzug
+      description: Schalter oder andere schaltbare Entität für den Dunstabzug.
+      selector:
+        entity:
+          filter:
+            - domain:
+                - switch
+                - fan
+          multiple: false
+
+    start_time:
+      name: Früheste Einschaltzeit
+      description: Vor dieser Uhrzeit wird der Dunstabzug nicht automatisch eingeschaltet.
+      default: '06:00:00'
+      selector:
+        time: {}
+
+    end_time:
+      name: Späteste Einschaltzeit
+      description: Nach dieser Uhrzeit wird der Dunstabzug nicht automatisch eingeschaltet. Ist er noch aktiv, wird er ausgeschaltet.
+      default: '22:00:00'
+      selector:
+        time: {}
+
+    off_delay:
+      name: Ausschaltverzögerung
+      description: Zeit, die alle Werte unter ihren Ausschaltschwellen bleiben müssen, bevor der Dunstabzug ausgeschaltet wird.
+      default:
+        minutes: 5
+      selector:
+        duration:
+          enable_day: false
+          enable_millisecond: false
+          enable_second: true
+
+mode: restart
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input power_sensor
+    id: sensor_change
+  - trigger: state
+    entity_id: !input humidity_sensor
+    id: sensor_change
+  - trigger: state
+    entity_id: !input temperature_sensor
+    id: sensor_change
+  - trigger: state
+    entity_id: !input occupancy_sensor
+    id: occupancy_change
+  - trigger: time
+    at: !input start_time
+    id: start_time
+  - trigger: time
+    at: !input end_time
+    id: end_time
+
+variables:
+  power_sensor: !input power_sensor
+  power_on_threshold: !input power_on_threshold
+  power_off_threshold: !input power_off_threshold
+  humidity_sensor: !input humidity_sensor
+  humidity_on_threshold: !input humidity_on_threshold
+  humidity_off_threshold: !input humidity_off_threshold
+  temperature_sensor: !input temperature_sensor
+  temperature_on_threshold: !input temperature_on_threshold
+  temperature_off_threshold: !input temperature_off_threshold
+  occupancy_sensor: !input occupancy_sensor
+  exhaust_fan: !input exhaust_fan
+
+conditions: []
+
+actions:
+  - choose:
+      - alias: Dunstabzug einschalten
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.id != 'end_time' }}"
+          - condition: time
+            after: !input start_time
+            before: !input end_time
+          - condition: state
+            entity_id: !input occupancy_sensor
+            state: 'on'
+          - condition: state
+            entity_id: !input exhaust_fan
+            state: 'off'
+          - condition: template
+            value_template: >-
+              {{ states(power_sensor) | float(0) > power_on_threshold
+                 or states(humidity_sensor) | float(0) > humidity_on_threshold
+                 or states(temperature_sensor) | float(0) > temperature_on_threshold }}
+        sequence:
+          - action: homeassistant.turn_on
+            target:
+              entity_id: !input exhaust_fan
+
+      - alias: Dunstabzug ausschalten
+        conditions:
+          - condition: state
+            entity_id: !input exhaust_fan
+            state: 'on'
+          - condition: template
+            value_template: >-
+              {{ states(power_sensor) | float(0) <= power_off_threshold
+                 and states(humidity_sensor) | float(0) <= humidity_off_threshold
+                 and states(temperature_sensor) | float(0) <= temperature_off_threshold }}
+        sequence:
+          - delay: !input off_delay
+          - condition: state
+            entity_id: !input exhaust_fan
+            state: 'on'
+          - condition: template
+            value_template: >-
+              {{ states(power_sensor) | float(0) <= power_off_threshold
+                 and states(humidity_sensor) | float(0) <= humidity_off_threshold
+                 and states(temperature_sensor) | float(0) <= temperature_off_threshold }}
+          - action: homeassistant.turn_off
+            target:
+              entity_id: !input exhaust_fan
