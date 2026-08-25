@@ -1,27 +1,113 @@
 blueprint:
-  name: Dunstabzug – automatische Koch-Erkennung
+  name: Dunstabzug – intelligente Koch-Erkennung
   description: >-
-    Schaltet einen Dunstabzug automatisch ein, wenn mindestens einer von
-    Leistungsaufnahme, Luftfeuchtigkeit oder Temperatur einen konfigurierbaren
-    Einschaltwert überschreitet und eine Person in der Küche erkannt wird.
-    Der Dunstabzug wird wieder ausgeschaltet, wenn alle Werte unter ihren
-    Ausschaltschwellen liegen. Separate Ein-/Ausschaltschwellen bilden eine
-    Hysterese und verhindern unnötiges Schalten an der Grenze.
+    Erkennt Kochen anhand der Änderung von Luftfeuchtigkeit und Temperatur
+    statt einer kaum nutzbaren Leistungsaufnahme. Der Dunstabzug wird nur
+    bei erkannter Anwesenheit und innerhalb des Zeitfensters eingeschaltet.
+    Separate Einschalt- und Ausschaltwerte bilden eine Hysterese.
   domain: automation
   source_url: https://github.com/sanftleben/dunstabzug-automatisierung/blob/main/blueprints/automation/sanftleben/dunstabzug_automatisierung.yaml
   input:
-    power_sensor:
-      name: Leistungssensor
-      description: Sensor für die aktuelle Leistungsaufnahme des Kochfelds bzw. Geräts in Watt.
+    humidity_rate_sensor:
+      name: Luftfeuchtigkeit – Änderungsrate
+      description: >-
+        Derivative-Sensor der Küchen-Luftfeuchtigkeit, idealerweise in %/min.
+        Positive Werte bedeuten steigende Luftfeuchtigkeit.
       selector:
         entity:
           filter:
             - domain: sensor
-          multiple: false
 
-    power_on_threshold:
-      name: Leistung – Einschalten
-      description: Ab dieser Leistung wird Kochen erkannt.
+    humidity_rise_threshold:
+      name: Luftfeuchtigkeit – Anstieg zum Einschalten
+      description: Ab diesem Anstieg pro Minute wird Kochdampf erkannt.
+      default: 0.15
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.01
+          unit_of_measurement: '%/min'
+          mode: box
+
+    humidity_sensor:
+      name: Luftfeuchtigkeit – absolut
+      description: Aktuelle relative Luftfeuchtigkeit der Küche.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+
+    humidity_minimum:
+      name: Luftfeuchtigkeit – Mindestwert
+      description: Der absolute Feuchtewert muss mindestens diesen Wert erreichen, damit der Feuchteanstieg als Kochsignal zählt.
+      default: 45
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: '%'
+          mode: box
+
+    temperature_rate_sensor:
+      name: Temperatur – Änderungsrate
+      description: >-
+        Derivative-Sensor der Küchentemperatur, idealerweise in °C/min.
+        Positive Werte bedeuten steigende Temperatur.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+
+    temperature_rise_threshold:
+      name: Temperatur – Anstieg zum Einschalten
+      description: Ab diesem Temperaturanstieg pro Minute wird zusätzliche Wärme erkannt.
+      default: 0.08
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.01
+          unit_of_measurement: '°C/min'
+          mode: box
+
+    temperature_sensor:
+      name: Temperatur – absolut
+      description: Aktuelle Temperatur der Küche.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+
+    temperature_minimum:
+      name: Temperatur – Mindestwert
+      description: Der absolute Temperaturwert muss mindestens diesen Wert erreichen, damit der Temperaturanstieg als Kochsignal zählt.
+      default: 24
+      selector:
+        number:
+          min: -20
+          max: 60
+          step: 0.1
+          unit_of_measurement: '°C'
+          mode: box
+
+    power_sensor:
+      name: Optionaler Leistungssensor
+      description: >-
+        Optionales Zusatzsignal. Für einen Gasherd kann hier der minimale
+        Zündimpuls bzw. die Leistungsaufnahme des Kochfelds verwendet werden.
+      default: ''
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+
+    power_threshold:
+      name: Leistung – Zusatzsignal
+      description: >-
+        Leistung, die als zusätzliches Kochsignal gilt. Das Signal ist für
+        Gasherde optional und sollte nicht die Haupt-Erkennung sein.
       default: 1
       selector:
         number:
@@ -31,92 +117,13 @@ blueprint:
           unit_of_measurement: W
           mode: box
 
-    power_off_threshold:
-      name: Leistung – Ausschalten
-      description: Unterhalb dieses Wertes gilt die Leistung als normalisiert.
-      default: 0.5
-      selector:
-        number:
-          min: 0
-          max: 5000
-          step: 0.1
-          unit_of_measurement: W
-          mode: box
-
-    humidity_sensor:
-      name: Luftfeuchtigkeitssensor
-      description: Sensor für die relative Luftfeuchtigkeit in der Küche.
-      selector:
-        entity:
-          filter:
-            - domain: sensor
-          multiple: false
-
-    humidity_on_threshold:
-      name: Luftfeuchtigkeit – Einschalten
-      description: Ab dieser Luftfeuchtigkeit wird Kochen erkannt.
-      default: 46
-      selector:
-        number:
-          min: 0
-          max: 100
-          step: 0.1
-          unit_of_measurement: '%'
-          mode: box
-
-    humidity_off_threshold:
-      name: Luftfeuchtigkeit – Ausschalten
-      description: Unterhalb dieses Wertes gilt die Luftfeuchtigkeit als normalisiert.
-      default: 44
-      selector:
-        number:
-          min: 0
-          max: 100
-          step: 0.1
-          unit_of_measurement: '%'
-          mode: box
-
-    temperature_sensor:
-      name: Temperatursensor
-      description: Sensor für die Temperatur in der Küche.
-      selector:
-        entity:
-          filter:
-            - domain: sensor
-          multiple: false
-
-    temperature_on_threshold:
-      name: Temperatur – Einschalten
-      description: Ab dieser Temperatur wird Kochen erkannt.
-      default: 30
-      selector:
-        number:
-          min: -20
-          max: 100
-          step: 0.1
-          unit_of_measurement: °C
-          mode: box
-
-    temperature_off_threshold:
-      name: Temperatur – Ausschalten
-      description: Unterhalb dieses Wertes gilt die Temperatur als normalisiert.
-      default: 29
-      selector:
-        number:
-          min: -20
-          max: 100
-          step: 0.1
-          unit_of_measurement: °C
-          mode: box
-
     occupancy_sensor:
       name: Anwesenheitssensor Küche
-      description: Der Dunstabzug wird nur automatisch eingeschaltet, wenn hier Anwesenheit erkannt wird.
+      description: Automatisches Einschalten erfolgt nur bei erkannter Anwesenheit.
       selector:
         entity:
           filter:
             - domain: binary_sensor
-          multiple: false
 
     exhaust_fan:
       name: Dunstabzug
@@ -127,25 +134,22 @@ blueprint:
             - domain:
                 - switch
                 - fan
-          multiple: false
 
     start_time:
       name: Früheste Einschaltzeit
-      description: Vor dieser Uhrzeit wird der Dunstabzug nicht automatisch eingeschaltet.
       default: '06:00:00'
       selector:
         time: {}
 
     end_time:
       name: Späteste Einschaltzeit
-      description: Nach dieser Uhrzeit wird der Dunstabzug nicht mehr automatisch eingeschaltet.
       default: '22:00:00'
       selector:
         time: {}
 
     off_delay:
       name: Ausschaltverzögerung
-      description: Zeit, die alle Werte unter ihren Ausschaltschwellen bleiben müssen, bevor der Dunstabzug ausgeschaltet wird.
+      description: Zeit, die kein Kochsignal mehr vorhanden sein muss, bevor der Dunstabzug ausgeht.
       default:
         minutes: 5
       selector:
@@ -159,23 +163,35 @@ max_exceeded: silent
 
 triggers:
   - trigger: state
-    entity_id: !input power_sensor
-    id: sensor_change
+    entity_id: !input humidity_rate_sensor
+    id: humidity_rate
   - trigger: state
     entity_id: !input humidity_sensor
-    id: sensor_change
+    id: humidity
+  - trigger: state
+    entity_id: !input temperature_rate_sensor
+    id: temperature_rate
   - trigger: state
     entity_id: !input temperature_sensor
-    id: sensor_change
+    id: temperature
   - trigger: state
     entity_id: !input occupancy_sensor
-    id: occupancy_change
-  - trigger: time
-    at: !input start_time
-    id: start_time
+    id: occupancy
   - trigger: time
     at: !input end_time
     id: end_time
+
+variables:
+  humidity_rate_sensor: !input humidity_rate_sensor
+  humidity_rate_threshold: !input humidity_rise_threshold
+  humidity_sensor: !input humidity_sensor
+  humidity_minimum: !input humidity_minimum
+  temperature_rate_sensor: !input temperature_rate_sensor
+  temperature_rate_threshold: !input temperature_rise_threshold
+  temperature_sensor: !input temperature_sensor
+  temperature_minimum: !input temperature_minimum
+  power_sensor: !input power_sensor
+  power_threshold: !input power_threshold
 
 conditions: []
 
@@ -194,9 +210,16 @@ actions:
             state: 'off'
           - condition: template
             value_template: >-
-              {{ states(power_sensor) | float(0) > (power_on_threshold | float(0))
-                 or states(humidity_sensor) | float(0) > (humidity_on_threshold | float(0))
-                 or states(temperature_sensor) | float(0) > (temperature_on_threshold | float(0)) }}
+              {% set humidity_rising =
+                states(humidity_rate_sensor) | float(0) >= (humidity_rate_threshold | float(0))
+                and states(humidity_sensor) | float(0) >= (humidity_minimum | float(0)) %}
+              {% set temperature_rising =
+                states(temperature_rate_sensor) | float(0) >= (temperature_rate_threshold | float(0))
+                and states(temperature_sensor) | float(0) >= (temperature_minimum | float(0)) %}
+              {% set power_signal =
+                power_sensor != ''
+                and states(power_sensor) | float(0) >= (power_threshold | float(0)) %}
+              {{ humidity_rising or temperature_rising or power_signal }}
         sequence:
           - action: homeassistant.turn_on
             target:
@@ -209,9 +232,13 @@ actions:
             state: 'on'
           - condition: template
             value_template: >-
-              {{ states(power_sensor) | float(0) <= (power_off_threshold | float(0))
-                 and states(humidity_sensor) | float(0) <= (humidity_off_threshold | float(0))
-                 and states(temperature_sensor) | float(0) <= (temperature_off_threshold | float(0)) }}
+              {% set humidity_active =
+                states(humidity_rate_sensor) | float(0) > 0
+                or states(humidity_sensor) | float(0) > (humidity_minimum | float(0)) %}
+              {% set temperature_active =
+                states(temperature_rate_sensor) | float(0) > 0
+                or states(temperature_sensor) | float(0) > (temperature_minimum | float(0)) %}
+              {{ not humidity_active and not temperature_active }}
         sequence:
           - delay: !input off_delay
           - condition: state
@@ -219,9 +246,8 @@ actions:
             state: 'on'
           - condition: template
             value_template: >-
-              {{ states(power_sensor) | float(0) <= (power_off_threshold | float(0))
-                 and states(humidity_sensor) | float(0) <= (humidity_off_threshold | float(0))
-                 and states(temperature_sensor) | float(0) <= (temperature_off_threshold | float(0)) }}
+              {{ states(humidity_rate_sensor) | float(0) <= 0
+                 and states(temperature_rate_sensor) | float(0) <= 0 }}
           - action: homeassistant.turn_off
             target:
               entity_id: !input exhaust_fan
