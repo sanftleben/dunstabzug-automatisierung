@@ -4,7 +4,10 @@ blueprint:
     Erkennt Kochaktivität anhand der dynamischen Änderung von Luftfeuchtigkeit
     und Temperatur. Absolute Sensorwerte werden nicht als Kochsignal verwendet,
     da sie vom normalen Küchenklima abhängen. Ein gewichteter Score verhindert,
-    dass einzelne kurze Messspitzen den Dunstabzug einschalten.
+    dass einzelne kurze Messspitzen den Dunstabzug einschalten. Zusätzlich muss
+    ein Anstieg eine Bestätigungsdauer lang anhalten und die Küche bereits eine
+    Vorlaufzeit lang betreten sein, damit das blosse Betreten des Raums nicht
+    einschaltet.
   domain: automation
   source_url: https://github.com/sanftleben/dunstabzug-automatisierung/blob/main/blueprints/automation/sanftleben/dunstabzug_automatisierung.yaml
   input:
@@ -113,6 +116,36 @@ blueprint:
           step: 1
           mode: slider
 
+    presence_warmup:
+      name: Anwesenheits-Vorlaufzeit
+      description: >-
+        So lange muss die Küche bereits durchgehend belegt sein, bevor
+        überhaupt eingeschaltet werden darf. Verhindert, dass das blosse
+        Betreten des Raums den Dunstabzug startet, und gibt den
+        Derivative-Sensoren Zeit, sich auf die neue Raumsituation
+        einzupendeln.
+      default:
+        minutes: 5
+      selector:
+        duration:
+          enable_day: false
+          enable_millisecond: false
+          enable_second: true
+
+    sustain_duration:
+      name: Bestätigungsdauer
+      description: >-
+        So lange muss eine Änderungsrate ununterbrochen über ihrer Schwelle
+        liegen, bevor der Koch-Score überhaupt bewertet wird. Kurze
+        Messspitzen durch Türöffnen oder Körperwärme fallen damit heraus.
+      default:
+        minutes: 3
+      selector:
+        duration:
+          enable_day: false
+          enable_millisecond: false
+          enable_second: true
+
     start_time:
       name: Früheste Einschaltzeit
       default: '06:00:00'
@@ -128,8 +161,8 @@ blueprint:
     off_delay:
       name: Nachlaufzeit
       description: >-
-        Zeit, die nach Ende der erkannten Kochaktivität gewartet wird, bevor
-        der Dunstabzug ausgeschaltet wird.
+        So lange müssen beide Änderungsraten durchgehend unter ihren
+        Koch-Schwellen liegen, bevor der Dunstabzug ausgeschaltet wird.
       default:
         minutes: 7
       selector:
@@ -142,15 +175,45 @@ mode: restart
 max_exceeded: silent
 
 triggers:
-  - trigger: state
+  # Einschalt-Kandidaten: eine Änderungsrate liegt die Bestätigungsdauer lang
+  # durchgehend über einer Schwelle. Jede Score-Stufe braucht einen eigenen
+  # Trigger, weil ein numeric_state-Trigger nur beim Überschreiten feuert –
+  # sonst würde ein langsam aufbauender Kochvorgang durchrutschen.
+  - trigger: numeric_state
     entity_id: !input humidity_rate_sensor
-    id: humidity_rate
-  - trigger: state
+    above: !input humidity_rise_threshold
+    for: !input sustain_duration
+    id: cooking
+  - trigger: numeric_state
+    entity_id: !input humidity_rate_sensor
+    above: !input humidity_strong_rise_threshold
+    for: !input sustain_duration
+    id: cooking
+  - trigger: numeric_state
     entity_id: !input temperature_rate_sensor
-    id: temperature_rate
-  - trigger: state
-    entity_id: !input occupancy_sensor
-    id: occupancy
+    above: !input temperature_rise_threshold
+    for: !input sustain_duration
+    id: cooking
+  - trigger: numeric_state
+    entity_id: !input temperature_rate_sensor
+    above: !input temperature_strong_rise_threshold
+    for: !input sustain_duration
+    id: cooking
+
+  # Nachlauf: eine Änderungsrate liegt die Nachlaufzeit lang durchgehend
+  # unter ihrer Koch-Schwelle. Beide Raten werden danach als Bedingung
+  # geprüft, damit welche Rate zuerst abfällt keine Rolle spielt.
+  - trigger: numeric_state
+    entity_id: !input humidity_rate_sensor
+    below: !input humidity_rise_threshold
+    for: !input off_delay
+    id: cooldown
+  - trigger: numeric_state
+    entity_id: !input temperature_rate_sensor
+    below: !input temperature_rise_threshold
+    for: !input off_delay
+    id: cooldown
+
   - trigger: time
     at: !input end_time
     id: end_time
@@ -187,12 +250,15 @@ actions:
   - choose:
       - alias: Dunstabzug einschalten
         conditions:
+          - condition: trigger
+            id: cooking
           - condition: time
             after: !input start_time
             before: !input end_time
           - condition: state
             entity_id: !input occupancy_sensor
             state: 'on'
+            for: !input presence_warmup
           - condition: state
             entity_id: !input exhaust_fan
             state: 'off'
@@ -206,14 +272,12 @@ actions:
 
       - alias: Dunstabzug ausschalten
         conditions:
-          - condition: state
-            entity_id: !input exhaust_fan
-            state: 'on'
-          - condition: template
-            value_template: >-
-              {{ cooking_score | int(0) < (required_score | int(0)) }}
-        sequence:
-          - delay: !input off_delay
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: cooldown
+              - condition: trigger
+                id: end_time
           - condition: state
             entity_id: !input exhaust_fan
             state: 'on'
@@ -221,6 +285,7 @@ actions:
             value_template: >-
               {{ (states(humidity_rate_sensor) | float(0)) < (humidity_rise_threshold | float(0))
                  and (states(temperature_rate_sensor) | float(0)) < (temperature_rise_threshold | float(0)) }}
+        sequence:
           - action: homeassistant.turn_off
             target:
               entity_id: !input exhaust_fan
