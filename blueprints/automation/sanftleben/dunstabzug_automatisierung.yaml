@@ -174,22 +174,27 @@ triggers:
     id: end_time
 
 variables:
-  humidity_rate: "{{ states(!input humidity_rate_sensor) | float(0) }}"
-  humidity: "{{ states(!input humidity_sensor) | float(0) }}"
-  temperature_rate: "{{ states(!input temperature_rate_sensor) | float(0) }}"
-  temperature: "{{ states(!input temperature_sensor) | float(0) }}"
+  humidity_rate_sensor: !input humidity_rate_sensor
+  humidity_rise_threshold: !input humidity_rise_threshold
+  humidity_sensor: !input humidity_sensor
+  humidity_minimum: !input humidity_minimum
+  temperature_rate_sensor: !input temperature_rate_sensor
+  temperature_rise_threshold: !input temperature_rise_threshold
+  temperature_sensor: !input temperature_sensor
+  temperature_minimum: !input temperature_minimum
+  required_score: !input required_score
   score: >-
     {% set ns = namespace(value=0) %}
-    {% if humidity_rate >= ( !input humidity_rise_threshold | float(0) ) %}
+    {% if states(humidity_rate_sensor) | float(0) >= humidity_rise_threshold | float(0) %}
       {% set ns.value = ns.value + 2 %}
     {% endif %}
-    {% if humidity >= ( !input humidity_minimum | float(0) ) %}
+    {% if states(humidity_sensor) | float(0) >= humidity_minimum | float(0) %}
       {% set ns.value = ns.value + 1 %}
     {% endif %}
-    {% if temperature_rate >= ( !input temperature_rise_threshold | float(0) ) %}
+    {% if states(temperature_rate_sensor) | float(0) >= temperature_rise_threshold | float(0) %}
       {% set ns.value = ns.value + 1 %}
     {% endif %}
-    {% if temperature >= ( !input temperature_minimum | float(0) ) %}
+    {% if states(temperature_sensor) | float(0) >= temperature_minimum | float(0) %}
       {% set ns.value = ns.value + 1 %}
     {% endif %}
     {{ ns.value }}
@@ -210,8 +215,7 @@ actions:
             entity_id: !input exhaust_fan
             state: 'off'
           - condition: template
-            value_template: >-
-              {{ score | int(0) >= ( !input required_score | int(0) ) }}
+            value_template: "{{ score | int(0) >= required_score | int(0) }}"
         sequence:
           - action: homeassistant.turn_on
             target:
@@ -223,8 +227,7 @@ actions:
             entity_id: !input exhaust_fan
             state: 'on'
           - condition: template
-            value_template: >-
-              {{ score | int(0) < ( !input required_score | int(0) ) }}
+            value_template: "{{ score | int(0) < required_score | int(0) }}"
         sequence:
           - delay: !input off_delay
           - condition: state
@@ -232,8 +235,8 @@ actions:
             state: 'on'
           - condition: template
             value_template: >-
-              {{ (states(!input humidity_rate_sensor) | float(0)) < ( !input humidity_rise_threshold | float(0) )
-                 and (states(!input temperature_rate_sensor) | float(0)) < ( !input temperature_rise_threshold | float(0) ) }}
+              {{ (states(humidity_rate_sensor) | float(0)) < (humidity_rise_threshold | float(0))
+                 and (states(temperature_rate_sensor) | float(0)) < (temperature_rise_threshold | float(0)) }}
           - action: homeassistant.turn_off
             target:
               entity_id: !input exhaust_fan
