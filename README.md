@@ -4,30 +4,28 @@ Home Assistant Blueprint zur automatischen Steuerung eines Dunstabzugs. Die Koch
 
 ## Erkennung
 
-Die Automation berechnet einen Koch-Score aus vier Signalen:
+Die Automation wertet ausschließlich die **Änderung** der Luftfeuchtigkeit und Temperatur aus. Absolute Werte werden bewusst nicht als Kochsignal verwendet, weil sie vom normalen Küchenklima abhängen.
 
 | Signal | Standard | Punkte |
 |---|---:|---:|
-| Luftfeuchtigkeit steigt deutlich | >= 0,15 %/min | +2 |
-| Luftfeuchtigkeit ist erhöht | >= 45 % | +1 |
-| Temperatur steigt deutlich | >= 0,08 °C/min | +1 |
-| Temperatur ist erhöht | >= 24 °C | +1 |
+| Luftfeuchtigkeit steigt >= 0,3 %/min | +2 |
+| Luftfeuchtigkeit steigt >= 0,8 %/min | +1 zusätzlich |
+| Temperatur steigt >= 0,2 °C/min | +1 |
+| Temperatur steigt >= 1,0 °C/min | +1 zusätzlich |
 
 Standardmäßig wird der Dunstabzug ab **3 Punkten** eingeschaltet.
 
-Dadurch reicht zum Beispiel ein deutlicher Feuchteanstieg alleine noch nicht aus. Ein deutlicher Feuchteanstieg plus erhöhte Luftfeuchtigkeit oder Temperaturanstieg dagegen schon.
-
-Die Leistungsaufnahme des Gasherds wird bewusst nicht mehr als primäres Signal verwendet.
+Beispiel: Ein deutlicher Feuchteanstieg (+2) zusammen mit einem Temperaturanstieg (+1) reicht zum Einschalten. Ein einzelner kleiner Temperaturanstieg reicht nicht aus.
 
 ## Nachlauf
 
 Sobald die Kochaktivität nicht mehr erkannt wird, startet ein konfigurierbarer Nachlauf. Standardmäßig läuft der Dunstabzug noch **7 Minuten** weiter.
 
-Während dieser Zeit wird die Automation bei neuen Sensoränderungen erneut bewertet. Beginnt die Kochaktivität wieder, wird der Nachlauf dadurch abgebrochen und der Dunstabzug bleibt an.
+Während dieser Zeit werden die aktuellen Änderungsraten weiter geprüft. Entsteht erneut ein deutlicher Anstieg, bleibt der Dunstabzug an und der Nachlauf wird durch die erneute Bewertung praktisch verlängert.
 
 ## Benötigte Sensoren
 
-Es werden vier Sensoren benötigt:
+Es werden zwei normale Sensoren und deren jeweilige Änderungsraten benötigt:
 
 1. Luftfeuchtigkeit Küche
 2. Derivative-Sensor der Luftfeuchtigkeit in %/min
@@ -36,7 +34,7 @@ Es werden vier Sensoren benötigt:
 
 Zusätzlich werden ein Anwesenheitssensor der Küche und der zu steuernde Switch bzw. Fan benötigt.
 
-### Beispiel für Derivative-Sensoren
+### Beispiel für geglättete Derivative-Sensoren
 
 ```yaml
 sensor:
@@ -53,7 +51,7 @@ sensor:
     time_window: '00:05:00'
 ```
 
-Das `time_window` sorgt dafür, dass kurze Messspitzen nicht sofort als starke Änderung interpretiert werden.
+Das 5-Minuten-Fenster glättet kurze Messspitzen. Die Änderungsraten hängen trotzdem vom Messintervall und der Position des Sensors ab.
 
 ## Blueprint installieren
 
@@ -65,6 +63,6 @@ Danach in Home Assistant unter **Einstellungen → Automatisierungen & Szenen �
 
 ## Abstimmung
 
-Die Standardwerte sind bewusst nur ein Startpunkt. Besonders die Änderungsraten hängen stark vom Aufstellungsort des Sensors und dessen Messintervall ab.
+Die Standardwerte sind anhand deines gezeigten Kochverlaufs gewählt: normale Luftfeuchtigkeit um etwa 71–73 % wird ignoriert, während der deutliche Feuchte- und Temperaturanstieg beim Nudelkochen als Kochaktivität erkannt werden soll.
 
-Für einen Küchen-Sensor, der beim Kochen schnell auf Feuchte reagiert, ist die Luftfeuchte typischerweise das stärkste Signal. Die Temperatur dient vor allem als zusätzliche Bestätigung.
+Die Werte sind beim Erstellen der Automation konfigurierbar. Falls sich im echten Betrieb Fehlalarme zeigen, sollten zuerst die Änderungsraten und nicht absolute Temperatur-/Feuchteschwellen angepasst werden.
