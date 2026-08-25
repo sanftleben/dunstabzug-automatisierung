@@ -1,11 +1,10 @@
 blueprint:
   name: Dunstabzug – intelligente Koch-Erkennung
   description: >-
-    Erkennt Kochen anhand eines gewichteten Signals aus Luftfeuchte und
-    Temperatur. Der Dunstabzug wird eingeschaltet, sobald der konfigurierbare
-    Koch-Score erreicht wird. Anwesenheit und Zeitfenster werden berücksichtigt.
-    Nach dem Ende der Kochaktivität läuft der Dunstabzug noch für eine
-    konfigurierbare Zeit nach.
+    Erkennt Kochaktivität anhand der dynamischen Änderung von Luftfeuchtigkeit
+    und Temperatur. Absolute Sensorwerte werden nicht als Kochsignal verwendet,
+    da sie vom normalen Küchenklima abhängen. Ein gewichteter Score verhindert,
+    dass einzelne kurze Messspitzen den Dunstabzug einschalten.
   domain: automation
   source_url: https://github.com/sanftleben/dunstabzug-automatisierung/blob/main/blueprints/automation/sanftleben/dunstabzug_automatisierung.yaml
   input:
@@ -13,16 +12,20 @@ blueprint:
       name: Luftfeuchtigkeit – Änderungsrate
       description: >-
         Derivative-Sensor der Küchen-Luftfeuchtigkeit, idealerweise in %/min.
-        Positive Werte bedeuten steigende Luftfeuchtigkeit.
+        Positive Werte bedeuten steigende Luftfeuchtigkeit. Für weniger
+        Messrauschen den Derivative-Sensor mit einem geglätteten Quellsensor
+        oder einem geeigneten Zeitfenster betreiben.
       selector:
         entity:
           filter:
             - domain: sensor
 
     humidity_rise_threshold:
-      name: Luftfeuchtigkeit – deutlicher Anstieg
-      description: Ab diesem Anstieg pro Minute gibt es 2 Punkte für die Koch-Erkennung.
-      default: 0.15
+      name: Luftfeuchtigkeit – Koch-Anstieg
+      description: >-
+        Ab diesem Anstieg pro Minute gibt es 2 Punkte. Der Standardwert ist
+        für dein gemessenes Kochprofil bewusst etwas konservativ gewählt.
+      default: 0.3
       selector:
         number:
           min: 0
@@ -31,24 +34,16 @@ blueprint:
           unit_of_measurement: '%/min'
           mode: box
 
-    humidity_sensor:
-      name: Luftfeuchtigkeit – absolut
-      description: Aktuelle relative Luftfeuchtigkeit der Küche.
-      selector:
-        entity:
-          filter:
-            - domain: sensor
-
-    humidity_minimum:
-      name: Luftfeuchtigkeit – erhöhter Wert
-      description: Ab diesem absoluten Wert gibt es 1 zusätzlichen Punkt.
-      default: 45
+    humidity_strong_rise_threshold:
+      name: Luftfeuchtigkeit – starker Anstieg
+      description: Ab diesem Anstieg pro Minute gibt es 1 zusätzlichen Punkt.
+      default: 0.8
       selector:
         number:
           min: 0
-          max: 100
-          step: 0.1
-          unit_of_measurement: '%'
+          max: 20
+          step: 0.01
+          unit_of_measurement: '%/min'
           mode: box
 
     temperature_rate_sensor:
@@ -62,9 +57,11 @@ blueprint:
             - domain: sensor
 
     temperature_rise_threshold:
-      name: Temperatur – deutlicher Anstieg
-      description: Ab diesem Anstieg pro Minute gibt es 1 Punkt für die Koch-Erkennung.
-      default: 0.08
+      name: Temperatur – Koch-Anstieg
+      description: >-
+        Ab diesem Anstieg pro Minute gibt es 1 Punkt. Der Standardwert ist
+        für dein gemessenes Kochprofil gewählt.
+      default: 0.2
       selector:
         number:
           min: 0
@@ -73,24 +70,16 @@ blueprint:
           unit_of_measurement: '°C/min'
           mode: box
 
-    temperature_sensor:
-      name: Temperatur – absolut
-      description: Aktuelle Temperatur der Küche.
-      selector:
-        entity:
-          filter:
-            - domain: sensor
-
-    temperature_minimum:
-      name: Temperatur – erhöhter Wert
-      description: Ab diesem absoluten Wert gibt es 1 zusätzlichen Punkt.
-      default: 24
+    temperature_strong_rise_threshold:
+      name: Temperatur – starker Anstieg
+      description: Ab diesem Anstieg pro Minute gibt es 1 zusätzlichen Punkt.
+      default: 1
       selector:
         number:
-          min: -20
-          max: 60
-          step: 0.1
-          unit_of_measurement: '°C'
+          min: 0
+          max: 20
+          step: 0.01
+          unit_of_measurement: '°C/min'
           mode: box
 
     occupancy_sensor:
@@ -114,9 +103,8 @@ blueprint:
     required_score:
       name: Koch-Score zum Einschalten
       description: >-
-        Wie viele Punkte mindestens erreicht werden müssen. Standard 3 bedeutet
-        z. B. deutlicher Feuchteanstieg (2) plus erhöhter Feuchtewert (1), oder
-        Feuchteanstieg (2) plus Temperaturanstieg (1).
+        Mindestpunktzahl zum Einschalten. Standard 3: deutlicher
+        Feuchteanstieg (2) plus Temperaturanstieg (1) reicht bereits aus.
       default: 3
       selector:
         number:
@@ -140,8 +128,8 @@ blueprint:
     off_delay:
       name: Nachlaufzeit
       description: >-
-        Zeit, die nach Ende der Kochaktivität gewartet wird, bevor der
-        Dunstabzug ausgeschaltet wird.
+        Zeit, die nach Ende der erkannten Kochaktivität gewartet wird, bevor
+        der Dunstabzug ausgeschaltet wird.
       default:
         minutes: 7
       selector:
@@ -158,14 +146,8 @@ triggers:
     entity_id: !input humidity_rate_sensor
     id: humidity_rate
   - trigger: state
-    entity_id: !input humidity_sensor
-    id: humidity
-  - trigger: state
     entity_id: !input temperature_rate_sensor
     id: temperature_rate
-  - trigger: state
-    entity_id: !input temperature_sensor
-    id: temperature
   - trigger: state
     entity_id: !input occupancy_sensor
     id: occupancy
@@ -175,29 +157,29 @@ triggers:
 
 variables:
   humidity_rate_sensor: !input humidity_rate_sensor
-  humidity_rise_threshold: !input humidity_rise_threshold
-  humidity_sensor: !input humidity_sensor
-  humidity_minimum: !input humidity_minimum
   temperature_rate_sensor: !input temperature_rate_sensor
+  humidity_rise_threshold: !input humidity_rise_threshold
+  humidity_strong_rise_threshold: !input humidity_strong_rise_threshold
   temperature_rise_threshold: !input temperature_rise_threshold
-  temperature_sensor: !input temperature_sensor
-  temperature_minimum: !input temperature_minimum
+  temperature_strong_rise_threshold: !input temperature_strong_rise_threshold
   required_score: !input required_score
-  score: >-
-    {% set ns = namespace(value=0) %}
-    {% if states(humidity_rate_sensor) | float(0) >= humidity_rise_threshold | float(0) %}
-      {% set ns.value = ns.value + 2 %}
+  cooking_score: >-
+    {% set humidity_rate = states(humidity_rate_sensor) | float(0) %}
+    {% set temperature_rate = states(temperature_rate_sensor) | float(0) %}
+    {% set score = 0 %}
+    {% if humidity_rate >= (humidity_rise_threshold | float(0)) %}
+      {% set score = score + 2 %}
     {% endif %}
-    {% if states(humidity_sensor) | float(0) >= humidity_minimum | float(0) %}
-      {% set ns.value = ns.value + 1 %}
+    {% if humidity_rate >= (humidity_strong_rise_threshold | float(0)) %}
+      {% set score = score + 1 %}
     {% endif %}
-    {% if states(temperature_rate_sensor) | float(0) >= temperature_rise_threshold | float(0) %}
-      {% set ns.value = ns.value + 1 %}
+    {% if temperature_rate >= (temperature_rise_threshold | float(0)) %}
+      {% set score = score + 1 %}
     {% endif %}
-    {% if states(temperature_sensor) | float(0) >= temperature_minimum | float(0) %}
-      {% set ns.value = ns.value + 1 %}
+    {% if temperature_rate >= (temperature_strong_rise_threshold | float(0)) %}
+      {% set score = score + 1 %}
     {% endif %}
-    {{ ns.value }}
+    {{ score }}
 
 conditions: []
 
@@ -215,7 +197,8 @@ actions:
             entity_id: !input exhaust_fan
             state: 'off'
           - condition: template
-            value_template: "{{ score | int(0) >= required_score | int(0) }}"
+            value_template: >-
+              {{ cooking_score | int(0) >= (required_score | int(0)) }}
         sequence:
           - action: homeassistant.turn_on
             target:
@@ -227,7 +210,8 @@ actions:
             entity_id: !input exhaust_fan
             state: 'on'
           - condition: template
-            value_template: "{{ score | int(0) < required_score | int(0) }}"
+            value_template: >-
+              {{ cooking_score | int(0) < (required_score | int(0)) }}
         sequence:
           - delay: !input off_delay
           - condition: state
