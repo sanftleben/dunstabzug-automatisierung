@@ -200,6 +200,16 @@ triggers:
     for: !input sustain_duration
     id: cooking
 
+  # Sonderfall: Kochvorgang hat bereits begonnen (Score erfüllt), bevor die
+  # Küche als belegt erkannt wurde. Sobald die Vorlaufzeit abläuft, wird der
+  # Score erneut geprüft – ohne diesen Trigger würde die Automation schweigen,
+  # weil die Rate-Trigger nicht nochmal feuern (Schwelle bereits überschritten).
+  - trigger: state
+    entity_id: !input occupancy_sensor
+    to: 'on'
+    for: !input presence_warmup
+    id: cooking
+
   # Nachlauf: eine Änderungsrate liegt die Nachlaufzeit lang durchgehend
   # unter ihrer Koch-Schwelle. Beide Raten werden danach als Bedingung
   # geprüft, damit welche Rate zuerst abfällt keine Rolle spielt.
