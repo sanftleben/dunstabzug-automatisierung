@@ -8,17 +8,17 @@ Die Automation wertet ausschließlich die **Änderungsrate der Temperatur** aus.
 
 | Signal | Standard |
 |---|---:|
-| Einschalten ab Anstieg von | 0,8 °C/min |
+| Einschalten ab Anstieg von | 0,5 °C/min |
 | Ausschalten, wenn die Rate unter (Abstieg) | −0,25 °C/min |
 
 Die Standardwerte stammen aus dem Temperaturverlauf vom 03.–10.10.2026:
 
 | Typ | Dauer | maximale Rate (3-Minuten-Fenster) |
 |---|---:|---:|
-| Kochen (5 Vorgänge) | 8–15 min | 1,0 – 2,6 °C/min |
+| Kochen (6 Vorgänge) | 8–15 min | 0,74 – 2,6 °C/min |
 | Kurze Störungen (3 Fälle) | 3–4 min | 0,5 – 0,6 °C/min |
 
-Die Schwelle 0,8 liegt zwischen beiden Gruppen. Der schwächste Kochvorgang (1,01 °C/min) ist nur knapp darüber. Bei verpassten Kochvorgängen die Schwelle senken, bei Fehlalarmen anheben.
+Die Gruppen überlappen sich. Der schwächste Kochvorgang (10.10. abends, +4 °C in 8 Minuten) erreichte nur 0,74 °C/min und wurde mit der früheren Schwelle 0,8 verpasst. Mit 0,5 werden alle sechs Kochvorgänge erkannt, dafür kann auch eine der Störungen (Anstieg über etwa 3 Minuten) den Dunstabzug kurz einschalten. Er geht dann wieder aus, sobald die Temperatur fällt. Bei verpassten Kochvorgängen die Schwelle senken, bei Fehlalarmen anheben oder die Bestätigungsdauer erhöhen.
 
 ## Schutz gegen Fehlauslösung beim Betreten
 

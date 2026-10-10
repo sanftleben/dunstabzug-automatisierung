@@ -26,9 +26,10 @@ blueprint:
       name: Temperatur – Koch-Anstieg
       description: >-
         Ab diesem Anstieg pro Minute gilt es als Kochen. Der Standardwert liegt
-        zwischen kurzen Störungen (bis ca. 0,6 °C/min) und echten
-        Kochvorgängen (ab ca. 1,0 °C/min).
-      default: 0.8
+        knapp unter dem schwächsten gemessenen Kochvorgang (Spitze 0,74
+        °C/min). Kurze Störungen erreichen bis ca. 0,6 °C/min, halten das
+        aber meist nur kurz.
+      default: 0.5
       selector:
         number:
           min: 0
