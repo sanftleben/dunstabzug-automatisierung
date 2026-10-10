@@ -1,74 +1,92 @@
-# Dunstabzug – intelligente Koch-Erkennung
+# Dunstabzug – Koch-Erkennung per Temperaturanstieg
 
-Home Assistant Blueprint zur automatischen Steuerung eines Dunstabzugs. Die Koch-Erkennung ist speziell für einen Gasherd ausgelegt, bei dem eine elektrische Leistungsaufnahme kaum als Signal verwendbar ist.
+Home Assistant Blueprint zur automatischen Steuerung eines Dunstabzugs. Die Koch-Erkennung ist für einen Gasherd ausgelegt, bei dem eine elektrische Leistungsaufnahme kaum als Signal verwendbar ist. Als Signal dient die Abwärme, gemessen an einem Klimasensor in der Nähe des Dunstabzugs.
 
 ## Erkennung
 
-Die Automation wertet ausschließlich die **Änderung** der Luftfeuchtigkeit und Temperatur aus. Absolute Werte werden bewusst nicht als Kochsignal verwendet, weil sie vom normalen Küchenklima abhängen.
+Die Automation wertet ausschließlich die **Änderungsrate der Temperatur** aus. Absolute Werte werden bewusst nicht verwendet, weil sie vom normalen Küchenklima abhängen. Die Luftfeuchtigkeit wird nicht ausgewertet: Am Sensor direkt am Dunstabzug sinkt sie beim Kochen eher, weil sich die Luft erwärmt.
 
-| Signal | Standard | Punkte |
+| Signal | Standard |
+|---|---:|
+| Einschalten ab Anstieg von | 0,8 °C/min |
+| Ausschalten, wenn die Rate unter (Abstieg) | −0,25 °C/min |
+
+Die Standardwerte stammen aus dem Temperaturverlauf vom 03.–10.10.2026:
+
+| Typ | Dauer | maximale Rate (3-Minuten-Fenster) |
 |---|---:|---:|
-| Luftfeuchtigkeit steigt >= 0,3 %/min | +2 |
-| Luftfeuchtigkeit steigt >= 0,8 %/min | +1 zusätzlich |
-| Temperatur steigt >= 0,2 °C/min | +1 |
-| Temperatur steigt >= 1,0 °C/min | +1 zusätzlich |
+| Kochen (5 Vorgänge) | 8–15 min | 1,0 – 2,6 °C/min |
+| Kurze Störungen (3 Fälle) | 3–4 min | 0,5 – 0,6 °C/min |
 
-Standardmäßig wird der Dunstabzug ab **3 Punkten** eingeschaltet.
-
-Beispiel: Ein deutlicher Feuchteanstieg (+2) zusammen mit einem Temperaturanstieg (+1) reicht zum Einschalten. Ein einzelner kleiner Temperaturanstieg reicht nicht aus.
+Die Schwelle 0,8 liegt zwischen beiden Gruppen. Der schwächste Kochvorgang (1,01 °C/min) ist nur knapp darüber. Bei verpassten Kochvorgängen die Schwelle senken, bei Fehlalarmen anheben.
 
 ## Schutz gegen Fehlauslösung beim Betreten
 
-Das blosse Betreten der Küche kann den Dunstabzug nicht starten. Anwesenheit ist reine Bedingung und niemals Auslöser. Zwei Zeitschranken müssen zusätzlich erfüllt sein:
+Das blosse Betreten der Küche kann den Dunstabzug nicht starten. Anwesenheit ist reine Bedingung und niemals Auslöser für den Anstieg. Zwei Zeitschranken müssen zusätzlich erfüllt sein:
 
 | Zeitschranke | Standard | Bedeutung |
 |---|---:|---|
-| Anwesenheits-Vorlaufzeit | 5 min | So lange muss die Küche bereits durchgehend belegt sein, bevor eingeschaltet werden darf |
-| Bestätigungsdauer | 3 min | So lange muss eine Änderungsrate ununterbrochen über ihrer Schwelle liegen, bevor der Score überhaupt bewertet wird |
+| Anwesenheits-Vorlaufzeit | 3 min | So lange muss die Küche bereits durchgehend belegt sein, bevor eingeschaltet werden darf |
+| Bestätigungsdauer | 1 min | So lange muss die Änderungsrate ununterbrochen über der Koch-Schwelle liegen |
 
-Die Vorlaufzeit gibt den Derivative-Sensoren Zeit, sich auf die neue Raumsituation einzupendeln. Die Bestätigungsdauer filtert kurze Messspitzen heraus, wie sie durch Türöffnen, Körperwärme oder Messrauschen entstehen. Eingeschaltet wird also frühestens nach dem längeren der beiden Zeiträume.
+Hat das Kochen schon vor der Anwesenheitserkennung begonnen, wird nach Ablauf der Vorlaufzeit erneut geprüft, ob die Rate über der Schwelle liegt.
 
-Bei einem Gasherd mit Topf auf der Flamme ist der Feuchteanstieg lange vor Ablauf dieser Fristen stabil. Praktisch geht dadurch kaum Reaktionszeit verloren.
-
-Falls trotzdem noch Fehlalarme auftreten, zuerst die Bestätigungsdauer erhöhen, danach die Änderungsraten anheben. Absolute Temperatur- oder Feuchteschwellen sind bewusst kein Bestandteil der Erkennung.
+Falls Fehlalarme auftreten, zuerst die Bestätigungsdauer erhöhen, danach die Schwelle anheben.
 
 ## Nachlauf
 
-Der Dunstabzug schaltet aus, wenn **beide** Änderungsraten die Nachlaufzeit lang durchgehend unter ihren Koch-Schwellen liegen. Standard sind **7 Minuten**.
+Der Dunstabzug schaltet aus, wenn die Temperatur **fällt**: Die Änderungsrate muss die Nachlaufzeit lang durchgehend unter der negativen Abschalt-Schwelle liegen. Standard sind **2 Minuten** bei **−0,25 °C/min**.
 
-Entsteht während dieser Zeit erneut ein Anstieg über eine Schwelle, wird der Nachlauf verworfen und beginnt erst nach dem nächsten Abfall neu. Der Dunstabzug bleibt in diesem Fall an.
+Beim Kochen bleibt die Temperatur am Sensor oft auf einem Plateau (Rate nahe 0). Ein Plateau schaltet deshalb nicht aus, erst der Abfall nach dem Kochen. In den Messdaten liegt die Rate auf dem Plateau zwischen 0 und ±0,18 °C/min (Quantisierung des Sensors in 0,5-°C-Schritten). Nach dem Kochen fällt sie mehrere Minuten auf −0,34 bis −1,5 °C/min. Die Schwelle −0,25 liegt in dieser Lücke.
+
+Kehrt die Rate während des Nachlaufs über die Schwelle zurück, beginnt der Nachlauf neu. Schaltet der Dunstabzug bei einem zeitweise sinkenden Kochen (z. B. Flamme klein gedreht) zu früh aus, die Nachlaufzeit erhöhen oder die Schwelle senken. Kühlt die Küche nach dem Kochen nur langsam ab, schaltet erst die späteste Einschaltzeit aus.
 
 Zusätzlich prüft die späteste Einschaltzeit einmal täglich, ob abgeschaltet werden kann. Das dient als Sicherheitsnetz, falls die Automation neu geladen wurde, während der Dunstabzug lief.
 
+## Fenster
+
+- **Fenster öffnen:** Läuft der Dunstabzug, schaltet er sofort aus. Bei offenem Fenster schaltet er auch bei Kochanstieg nicht ein.
+- **Fenster schliessen:** Der Dunstabzug schaltet wieder ein, wenn alle Punkte zutreffen:
+  - Er wurde durch das Öffnen ausgeschaltet. Das wird daran erkannt, dass sich sein Zustand nach dem Öffnen geändert hat. War er vorher schon aus (Nachlauf oder von Hand), bleibt er aus.
+  - Die Küche ist belegt.
+  - Das Fenster war höchstens 20 Minuten offen (einstellbar).
+  - Es liegt zwischen frühester und spätester Einschaltzeit.
+
+„Es wird noch gekocht“ wird dabei **nicht gemessen**, sondern aus Anwesenheit und kurzer Öffnungsdauer geschlossen. Bei offenem Fenster fällt die Temperatur, daher sagt die Änderungsrate in dieser Zeit nichts über das Kochen aus. Wurde in der Zwischenzeit zu Ende gekocht, läuft der Dunstabzug nach dem Schliessen an, bis die Temperatur wieder fällt. Im ungünstigsten Fall schaltet ihn erst die späteste Einschaltzeit aus.
+
 ## Benötigte Sensoren
 
-Es werden zwei normale Sensoren und deren jeweilige Änderungsraten benötigt:
+1. Ein Temperatursensor der Küche, bevorzugt in der Nähe des Dunstabzugs
+2. Ein **Derivative-Sensor** (Helfer „Ableitung“) auf diesem Sensor, Einheit pro Minute
+3. Ein Anwesenheitssensor der Küche
+4. Ein Fensterkontakt der Küche (`on` = offen)
+5. Der zu steuernde Switch bzw. Fan
 
-1. Luftfeuchtigkeit Küche
-2. Derivative-Sensor der Luftfeuchtigkeit in %/min
-3. Temperatur Küche
-4. Derivative-Sensor der Temperatur in °C/min
+Der Blueprint erwartet im Feld *Temperatur – Änderungsrate* den Derivative-Sensor. Wird dort versehentlich der Rohsensor (z. B. 22 °C) eingetragen, liegt der Wert immer über der Schwelle: Die Rate-Trigger feuern nie, und der Dunstabzug geht nie automatisch aus.
 
-Zusätzlich werden ein Anwesenheitssensor der Küche und der zu steuernde Switch bzw. Fan benötigt.
+### Derivative-Sensor
 
-### Beispiel für geglättete Derivative-Sensoren
+Als Helfer unter **Einstellungen → Geräte & Dienste → Helfer → Helfer hinzufügen → Ableitungssensor**:
+
+| Feld | Wert |
+|---|---|
+| Eingangssensor | Temperatursensor der Küche |
+| Zeitfenster | 3 Minuten |
+| Zeiteinheit | Minuten |
+| Genauigkeit | 2 |
+
+Oder in YAML:
 
 ```yaml
 sensor:
   - platform: derivative
-    source: sensor.kuche_luftfeuchtigkeit
-    name: Küche Luftfeuchtigkeit Änderungsrate
-    unit_time: min
-    time_window: '00:05:00'
-
-  - platform: derivative
     source: sensor.kuche_temperatur
     name: Küche Temperatur Änderungsrate
     unit_time: min
-    time_window: '00:05:00'
+    time_window: '00:03:00'
 ```
 
-Das 5-Minuten-Fenster glättet kurze Messspitzen. Die Änderungsraten hängen trotzdem vom Messintervall und der Position des Sensors ab.
+Das 3-Minuten-Fenster glättet kurze Messspitzen. Die Schwellen im Blueprint wurden mit diesem Fenster ermittelt. Bei einem anderen Fenster ändern sich die Raten.
 
 ## Blueprint installieren
 
@@ -82,14 +100,8 @@ Danach in Home Assistant unter **Einstellungen → Automatisierungen & Szenen �
 
 Die Automation lässt sich nur im laufenden Home Assistant sinnvoll prüfen. Unter **Einstellungen → Automatisierungen → Dunstabzug → Traces**:
 
-1. **Betreten ohne Kochen** darf gar keinen Trace erzeugen. Erscheint trotzdem einer, ist noch ein Anwesenheits-Trigger aktiv.
-2. **Kochbeginn** erzeugt einen Trace mit dem Zweig *Dunstabzug einschalten*. Im Trace sichtbar: welcher Änderungsraten-Trigger gefeuert hat und welchen Wert `cooking_score` hatte.
+1. **Betreten ohne Kochen** darf keinen Trace im Zweig *Dunstabzug einschalten* erzeugen.
+2. **Kochbeginn** erzeugt einen Trace mit dem Zweig *Dunstabzug einschalten*.
 3. **Kochende** erzeugt nach Ablauf der Nachlaufzeit einen Trace mit dem Zweig *Dunstabzug ausschalten*.
 
-Ein abgebrochener Trace im Einschaltzweig ist normal und gewollt: er bedeutet, dass ein Anstieg zwar lange genug anhielt, aber Vorlaufzeit, Zeitfenster oder Score nicht erfüllt waren.
-
-## Abstimmung
-
-Die Standardwerte sind anhand deines gezeigten Kochverlaufs gewählt: normale Luftfeuchtigkeit um etwa 71–73 % wird ignoriert, während der deutliche Feuchte- und Temperaturanstieg beim Nudelkochen als Kochaktivität erkannt werden soll.
-
-Alle Werte sind beim Erstellen der Automation konfigurierbar.
+Ein abgebrochener Trace im Einschaltzweig ist normal: er bedeutet, dass ein Anstieg zwar lange genug anhielt, aber Zeitfenster, Anwesenheit oder Schwelle nicht erfüllt waren.
